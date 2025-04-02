@@ -4,7 +4,7 @@ An implementation of the Autonomous LLM-based Agent System (ALAS) for improving 
 
 ## Overview
 
-This implementation is based on the research paper **["LLM-based agents for automating the enhancement of user story quality: An early report". ](https://library.oapen.org/bitstream/handle/20.500.12657/90931/978-3-031-61154-4.pdf?sequence=1#page=126)**. The system uses specialized AI agents (Product Owner, Requirements Engineer) that work together to analyze and improve user stories, making them clearer, more complete, and better aligned with business objectives.
+This implementation is based on the research paper **["LLM-based agents for automating the enhancement of user story quality: An early report" ](https://library.oapen.org/bitstream/handle/20.500.12657/90931/978-3-031-61154-4.pdf?sequence=1#page=126)**. The system uses specialized AI agents (Product Owner, Requirements Engineer) that work together to analyze and improve user stories, making them clearer, more complete, and better aligned with business objectives.
 
 ## Features
 
