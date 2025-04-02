@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>AI Agent Pipeline</title>
+    <style>
+      body {
+        font-family: "Courier New", Courier, monospace;
+        margin: 40px;
+        max-width: 1000px;
+        margin: 0 auto;
+        line-height: 1.6;
+      }
+      .form-group {
+        margin-bottom: 20px;
+      }
+      textarea,
+      select {
+        width: 100%;
+        padding: 8px;
+        margin-top: 5px;
+        font-family: Arial, sans-serif;
+      }
+      button {
+        padding: 10px 15px;
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        cursor: pointer;
+        font-family: Arial, sans-serif;
+      }
+      button:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+      }
+      .loading {
+        display: none;
+        text-align: center;
+        margin: 20px 0;
+      }
+      .terminal {
+        background-color: #000;
+        color: #0f0;
+        padding: 20px;
+        border-radius: 5px;
+        margin-top: 20px;
+        white-space: pre-wrap;
+        font-family: "Courier New", Courier, monospace;
+        overflow-x: auto;
+        max-height: 600px;
+        overflow-y: auto;
+        display: none;
+      }
+      h1,
+      h2,
+      label {
+        font-family: Arial, sans-serif;
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .copy-btn {
+        background-color: #007bff;
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        border-radius: 3px;
+        cursor: pointer;
+        font-family: Arial, sans-serif;
+      }
+      .stop-btn {
+        background-color: #dc3545;
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        border-radius: 3px;
+        cursor: pointer;
+        font-family: Arial, sans-serif;
+        margin-left: 10px;
+      }
+      .api-warning {
+        background-color: #f8d7da;
+        color: #721c24;
+        padding: 10px;
+        border-radius: 4px;
+        margin-bottom: 20px;
+        font-family: Arial, sans-serif;
+      }
+      .api-key-form {
+        background-color: #f0f0f0;
+        padding: 15px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+      }
+      #status {
+        margin-top: 20px;
+        padding: 10px;
+        border-radius: 5px;
+        text-align: center;
+        display: none;
+      }
+      .processing {
+        background-color: #cce5ff;
+        color: #004085;
+      }
+      .complete {
+        background-color: #d4edda;
+        color: #155724;
+      }
+      .error {
+        background-color: #f8d7da;
+        color: #721c24;
+      }
+      .blink {
+        animation: blink-animation 1s steps(5, start) infinite;
+      }
+      @keyframes blink-animation {
+        to {
+          visibility: hidden;
+        }
+      }
+      .control-buttons {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>AI Agent Pipeline</h1>
+
+    {% if api_warning %}
+    <div class="api-warning">
+      <strong>{{ api_warning }}</strong>
+      <div class="api-key-form">
+        <p>Enter your OpenAI API key below:</p>
+        <div class="form-group">
+          <input
+            type="text"
+            id="api_key"
+            placeholder="sk-..."
+            style="width: 80%"
+          />
+          <button onclick="setApiKey()">Set API Key</button>
+        </div>
+        <p>
+          <small
+            >Note: This will only be stored in your current session and will
+            need to be re-entered if you restart the application.</small
+          >
+        </p>
+      </div>
+    </div>
+    {% endif %}
+
+    <form id="pipeline-form">
+      <div class="form-group">
+        <label for="config_file">Configuration File:</label>
+        <select id="config_file" name="config_file" required>
+          <option value="" disabled selected>
+            Select a configuration file
+          </option>
+          {% for config_file in config_files %}
+          <option value="{{ config_file }}">{{ config_file }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="user_story">User Story:</label>
+        <textarea
+          id="user_story"
+          name="user_story"
+          rows="5"
+          required
+        ></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="mvp_text">MVP Description:</label>
+        <textarea id="mvp_text" name="mvp_text" rows="5" required></textarea>
+      </div>
+
+      <button
+        type="submit"
+        id="submit-btn"
+        {%
+        if
+        api_warning
+        %}disabled{%
+        endif
+        %}
+      >
+        Run Pipeline
+      </button>
+    </form>
+
+    <div id="status" class="processing">
+      <span id="status-text">Processing</span>
+      <span class="blink">...</span>
+    </div>
+
+    <div class="header" id="terminal-header" style="display: none">
+      <h2>Terminal Output:</h2>
+      <div class="control-buttons">
+        <button class="stop-btn" id="stop-btn" onclick="stopProcessing()">
+          Stop Processing
+        </button>
+        <button class="copy-btn" onclick="copyOutput()">Copy Output</button>
+      </div>
+    </div>
+
+    <div class="terminal" id="terminal-output"></div>
+
+    <script>
+      // DOM elements
+      const form = document.getElementById("pipeline-form");
+      const submitBtn = document.getElementById("submit-btn");
+      const statusDiv = document.getElementById("status");
+      const statusText = document.getElementById("status-text");
+      const terminalHeader = document.getElementById("terminal-header");
+      const terminalOutput = document.getElementById("terminal-output");
+      const stopBtn = document.getElementById("stop-btn");
+
+      // Event source for streaming
+      let eventSource = null;
+
+      // Submit form handler
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+
+        // Clear previous output
+        terminalOutput.innerHTML = "";
+        terminalOutput.style.display = "block";
+        terminalHeader.style.display = "flex";
+
+        // Disable submit button and show status
+        submitBtn.disabled = true;
+        statusDiv.className = "processing";
+        statusText.textContent = "Processing";
+        statusDiv.style.display = "block";
+        stopBtn.disabled = false;
+
+        // Create form data
+        const formData = new FormData(form);
+
+        // Send request to start processing
+        fetch("/process", {
+          method: "POST",
+          body: formData,
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.error) {
+              showError(data.error);
+              return;
+            }
+
+            // Start listening for events
+            startEventStream();
+          })
+          .catch((error) => {
+            showError("Error: " + error);
+          });
+      });
+
+      function startEventStream() {
+        // Close any existing event source
+        if (eventSource) {
+          eventSource.close();
+        }
+
+        // Create a new event source
+        eventSource = new EventSource("/stream");
+
+        // Handle incoming messages
+        eventSource.onmessage = function (event) {
+          const data = JSON.parse(event.data);
+
+          if (data.message) {
+            // Add the message to the terminal
+            appendToTerminal(data.message);
+
+            // Auto-scroll to bottom
+            terminalOutput.scrollTop = terminalOutput.scrollHeight;
+          }
+
+          if (data.complete) {
+            // Processing is complete
+            eventSource.close();
+
+            // Update status
+            statusDiv.className = "complete";
+            statusText.textContent = "Complete";
+
+            // Re-enable submit button
+            submitBtn.disabled = false;
+            stopBtn.disabled = true;
+          }
+        };
+
+        // Handle errors
+        eventSource.onerror = function () {
+          eventSource.close();
+          showError("Connection to server lost");
+        };
+      }
+
+      function appendToTerminal(text) {
+        // Append text to terminal, preserving line breaks
+        terminalOutput.innerHTML += text.replace(/\n/g, "<br>");
+      }
+
+      function showError(message) {
+        // Display error in status
+        statusDiv.className = "error";
+        statusText.textContent = message;
+
+        // Re-enable submit button
+        submitBtn.disabled = false;
+        stopBtn.disabled = true;
+
+        // Close event source if open
+        if (eventSource) {
+          eventSource.close();
+        }
+      }
+
+      function stopProcessing() {
+        // Disable stop button while processing stop request
+        stopBtn.disabled = true;
+        statusText.textContent = "Stopping...";
+
+        fetch("/stop", {
+          method: "POST",
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.error) {
+              showError("Failed to stop: " + data.error);
+            }
+            // The stream will handle the completion
+          })
+          .catch((error) => {
+            showError("Error stopping: " + error);
+            stopBtn.disabled = false;
+          });
+      }
+
+      function copyOutput() {
+        const output = terminalOutput.innerText;
+        navigator.clipboard.writeText(output).then(
+          function () {
+            alert("Output copied to clipboard!");
+          },
+          function (err) {
+            console.error("Could not copy text: ", err);
+          }
+        );
+      }
+
+      function setApiKey() {
+        const apiKey = document.getElementById("api_key").value.trim();
+        if (!apiKey) {
+          alert("Please enter a valid API key");
+          return;
+        }
+
+        // Set API key as environment variable through a server request
+        fetch("/set_api_key", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ api_key: apiKey }),
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.success) {
+              alert("API key set successfully. Reloading page...");
+              location.reload();
+            } else {
+              alert("Failed to set API key: " + data.error);
+            }
+          })
+          .catch((error) => {
+            alert("Error: " + error);
+          });
+      }
+    </script>
+  </body>
+</html>
